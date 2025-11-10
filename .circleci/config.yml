@@ -12,7 +12,7 @@ jobs:
     steps:
       - checkout
 
-      # Install Java (needed for SonarScanner)
+      # Install Java (required for SonarScanner)
       - run:
           name: Install Java 17
           command: |
@@ -20,11 +20,14 @@ jobs:
             sudo apt-get install -y openjdk-17-jre-headless
             java -version
 
-      # Install Snyk CLI (fixed)
+      # Install Snyk CLI (user-level, permission-safe)
       - run:
           name: Install Snyk CLI
           command: |
-            npm install -g snyk
+            mkdir -p $HOME/.local
+            npm install snyk --prefix=$HOME/.local
+            echo 'export PATH=$HOME/.local/node_modules/.bin:$PATH' >> $BASH_ENV
+            source $BASH_ENV
             snyk --version
 
       # Install SonarScanner CLI
@@ -40,7 +43,7 @@ jobs:
             source $BASH_ENV
             sonar-scanner --version
 
-      # FRONTEND PIPELINE
+      # ---------- FRONTEND PIPELINE ----------
       - run:
           name: Frontend - Install Dependencies
           command: |
@@ -56,6 +59,7 @@ jobs:
       - run:
           name: Frontend - Snyk Security Scan
           command: |
+            source $BASH_ENV
             cd Frontend
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
@@ -64,6 +68,7 @@ jobs:
       - run:
           name: Frontend - SonarCloud Analysis
           command: |
+            source $BASH_ENV
             cd Frontend
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-frontend \
@@ -72,7 +77,7 @@ jobs:
               -Dsonar.login="${SONAR_TOKEN}" \
               -Dsonar.sources=.
 
-      # BACKEND PIPELINE
+      # ---------- BACKEND PIPELINE ----------
       - run:
           name: Backend - Install Dependencies
           command: |
@@ -88,6 +93,7 @@ jobs:
       - run:
           name: Backend - Snyk Security Scan
           command: |
+            source $BASH_ENV
             cd Backend
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
@@ -96,6 +102,7 @@ jobs:
       - run:
           name: Backend - SonarCloud Analysis
           command: |
+            source $BASH_ENV
             cd Backend
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-backend \
@@ -107,10 +114,11 @@ jobs:
 workflows:
   version: 2
 
+  # Nightly job (runs at 2 AM UTC)
   nightly-security-and-quality:
     triggers:
       - schedule:
-          cron: "0 2 * * *"   # Runs daily at 2 AM UTC
+          cron: "0 2 * * *"
           filters:
             branches:
               only:
@@ -118,6 +126,7 @@ workflows:
     jobs:
       - security-and-quality-scan
 
+  # On push to main or develop branches
   on-push:
     jobs:
       - security-and-quality-scan:
