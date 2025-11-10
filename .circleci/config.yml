@@ -47,8 +47,12 @@ jobs:
       - run:
           name: Frontend - Install Dependencies
           command: |
-            cd Frontend
-            npm ci
+                cd Frontend
+                if [ -f package-lock.json ]; then
+                npm ci
+                else
+                npm install
+                fi
 
       - run:
           name: Frontend - Run Tests (optional)
