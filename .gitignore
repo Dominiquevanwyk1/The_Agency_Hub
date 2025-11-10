@@ -1,0 +1,25 @@
+
+# Secrets
+.env
+*.pem
+*.pfx
+*.keystore
+*.cer
+*.p12
+*.jks
+credentials.json
+.env
+.env.*
+*.pem
+*.pfx
+*.p12
+*.jks
+*.cer
+*.key
+credentials.json
+azure*.json
+
+# env files
+.env
+.env.*
+!.env.example

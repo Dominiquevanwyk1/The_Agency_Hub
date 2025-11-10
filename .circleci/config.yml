@@ -1,0 +1,116 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@6.3.0
+
+jobs:
+  security-and-quality-scan:
+    docker:
+      - image: cimg/node:20.12
+    environment:
+      # Helps many Node/Angular tools; also used by Angular 20 toolchain
+      NODE_OPTIONS: "--max_old_space_size=4096"
+    steps:
+      - checkout
+
+      # Java for Sonar scanner
+      - run:
+          name: Install Java 17 (required by Sonar scanner)
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y openjdk-17-jre-headless
+            java -version
+
+      # Install Snyk CLI
+      - run:
+          name: Install Snyk CLI
+          command: |
+            curl -sL https://raw.githubusercontent.com/snyk/cli/main/install.sh | bash
+            snyk --version
+
+      # Download SonarScanner CLI
+      - run:
+          name: Install SonarScanner CLI
+          command: |
+            SCANNER_VERSION=5.0.1.3006
+            curl -sSLo /tmp/sonar.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
+            unzip -q /tmp/sonar.zip -d $HOME
+            mv $HOME/sonar-scanner-* $HOME/sonar-scanner
+            echo 'export PATH="$HOME/sonar-scanner/bin:$PATH"' >> $BASH_ENV
+            echo 'export SONAR_SCANNER_OPTS="-Xmx1024m"' >> $BASH_ENV
+            source $BASH_ENV
+            sonar-scanner --version
+
+      # FRONTEND: install deps, Snyk, Sonar
+      - run:
+          name: Frontend - Install
+          command: |
+            cd frontend
+            npm ci
+      - run:
+          name: Frontend - Tests with Coverage (optional)
+          command: |
+            cd frontend
+            npm run test:ci || echo "No Angular tests configured yet"
+      - run:
+          name: Frontend - Snyk (test + monitor)
+          command: |
+            cd frontend
+            snyk auth "$SNYK_TOKEN"
+            snyk test --severity-threshold=medium || true
+            snyk monitor --org="$SNYK_ORG" --project-name="versatile-visions-frontend" || true
+      - run:
+          name: Frontend - SonarCloud Scan
+          command: |
+            cd frontend
+            sonar-scanner \
+              -Dsonar.host.url="https://sonarcloud.io" \
+              -Dsonar.login="$SONAR_TOKEN"
+
+      # BACKEND: install deps, Snyk, Sonar
+      - run:
+          name: Backend - Install
+          command: |
+            cd backend
+            npm ci
+      - run:
+          name: Backend - Tests with Coverage (optional)
+          command: |
+            cd backend
+            npm run test:ci || echo "No backend tests configured yet"
+      - run:
+          name: Backend - Snyk (test + monitor)
+          command: |
+            cd backend
+            snyk auth "$SNYK_TOKEN"
+            snyk test --severity-threshold=medium || true
+            snyk monitor --org="$SNYK_ORG" --project-name="versatile-visions-backend" || true
+      - run:
+          name: Backend - SonarCloud Scan
+          command: |
+            cd backend
+            sonar-scanner \
+              -Dsonar.host.url="https://sonarcloud.io" \
+              -Dsonar.login="$SONAR_TOKEN"
+
+workflows:
+  version: 2
+  nightly-security-and-quality:
+    triggers:
+      - schedule:
+          cron: "0 2 * * *"   
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - security-and-quality-scan
+
+  on-push:
+    jobs:
+      - security-and-quality-scan:
+          filters:
+            branches:
+              only:
+                - main
+                - develop
