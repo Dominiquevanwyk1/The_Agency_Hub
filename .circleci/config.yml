@@ -8,26 +8,26 @@ jobs:
     docker:
       - image: cimg/node:20.12
     environment:
-      # Helps many Node/Angular tools; also used by Angular 20 toolchain
       NODE_OPTIONS: "--max_old_space_size=4096"
     steps:
       - checkout
 
-      # Java for Sonar scanner
+      # Install Java (needed for SonarScanner)
       - run:
-          name: Install Java 17 (required by Sonar scanner)
+          name: Install Java 17
           command: |
             sudo apt-get update
             sudo apt-get install -y openjdk-17-jre-headless
             java -version
 
-      # Install Snyk CLI
+      # Install Snyk CLI (fixed)
       - run:
           name: Install Snyk CLI
-            command: |
-                      npm install -g snyk
-                       snyk --version
-      # Download SonarScanner CLI
+          command: |
+            npm install -g snyk
+            snyk --version
+
+      # Install SonarScanner CLI
       - run:
           name: Install SonarScanner CLI
           command: |
@@ -40,64 +40,77 @@ jobs:
             source $BASH_ENV
             sonar-scanner --version
 
-      # FRONTEND: install deps, Snyk, Sonar
+      # FRONTEND PIPELINE
       - run:
-          name: Frontend - Install
+          name: Frontend - Install Dependencies
           command: |
-            cd frontend
+            cd Frontend
             npm ci
-      - run:
-          name: Frontend - Tests with Coverage (optional)
-          command: |
-            cd frontend
-            npm run test:ci || echo "No Angular tests configured yet"
-      - run:
-          name: Frontend - Snyk (test + monitor)
-          command: |
-            cd frontend
-            snyk auth "$SNYK_TOKEN"
-            snyk test --severity-threshold=medium || true
-            snyk monitor --org="$SNYK_ORG" --project-name="versatile-visions-frontend" || true
-      - run:
-          name: Frontend - SonarCloud Scan
-          command: |
-            cd frontend
-            sonar-scanner \
-              -Dsonar.host.url="https://sonarcloud.io" \
-              -Dsonar.login="$SONAR_TOKEN"
 
-      # BACKEND: install deps, Snyk, Sonar
       - run:
-          name: Backend - Install
+          name: Frontend - Run Tests (optional)
           command: |
-            cd backend
-            npm ci
+            cd Frontend
+            npm run test:ci || echo "No frontend tests configured yet"
+
       - run:
-          name: Backend - Tests with Coverage (optional)
+          name: Frontend - Snyk Security Scan
           command: |
-            cd backend
-            npm run test:ci || echo "No backend tests configured yet"
-      - run:
-          name: Backend - Snyk (test + monitor)
-          command: |
-            cd backend
-            snyk auth "$SNYK_TOKEN"
+            cd Frontend
+            snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
-            snyk monitor --org="$SNYK_ORG" --project-name="versatile-visions-backend" || true
+            snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
+
       - run:
-          name: Backend - SonarCloud Scan
+          name: Frontend - SonarCloud Analysis
           command: |
-            cd backend
+            cd Frontend
             sonar-scanner \
+              -Dsonar.projectKey=versatile-visions-frontend \
+              -Dsonar.organization="${SONAR_ORG}" \
               -Dsonar.host.url="https://sonarcloud.io" \
-              -Dsonar.login="$SONAR_TOKEN"
+              -Dsonar.login="${SONAR_TOKEN}" \
+              -Dsonar.sources=.
+
+      # BACKEND PIPELINE
+      - run:
+          name: Backend - Install Dependencies
+          command: |
+            cd Backend
+            npm ci
+
+      - run:
+          name: Backend - Run Tests (optional)
+          command: |
+            cd Backend
+            npm run test:ci || echo "No backend tests configured yet"
+
+      - run:
+          name: Backend - Snyk Security Scan
+          command: |
+            cd Backend
+            snyk auth "${SNYK_TOKEN}"
+            snyk test --severity-threshold=medium || true
+            snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-backend" || true
+
+      - run:
+          name: Backend - SonarCloud Analysis
+          command: |
+            cd Backend
+            sonar-scanner \
+              -Dsonar.projectKey=versatile-visions-backend \
+              -Dsonar.organization="${SONAR_ORG}" \
+              -Dsonar.host.url="https://sonarcloud.io" \
+              -Dsonar.login="${SONAR_TOKEN}" \
+              -Dsonar.sources=.
 
 workflows:
   version: 2
+
   nightly-security-and-quality:
     triggers:
       - schedule:
-          cron: "0 2 * * *"   
+          cron: "0 2 * * *"   # Runs daily at 2 AM UTC
           filters:
             branches:
               only:
