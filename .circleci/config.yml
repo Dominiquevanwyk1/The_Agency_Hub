@@ -9,10 +9,11 @@ jobs:
       - image: cimg/node:20.12
     environment:
       NODE_OPTIONS: "--max_old_space_size=4096"
+
     steps:
       - checkout
 
-      # Install Java (required for SonarScanner)
+      # Install Java (required by SonarScanner)
       - run:
           name: Install Java 17
           command: |
@@ -20,7 +21,7 @@ jobs:
             sudo apt-get install -y openjdk-17-jre-headless
             java -version
 
-      # Install Snyk CLI (user-level, permission-safe)
+      # Install Snyk CLI (User-level install — avoids permission issues)
       - run:
           name: Install Snyk CLI
           command: |
@@ -47,24 +48,24 @@ jobs:
       - run:
           name: Frontend - Install Dependencies
           command: |
-                cd Frontend
-                if [ -f package-lock.json ]; then
-                npm ci
-                else
-                npm install
-                fi
+            cd "Versatile Visions/Frontend"
+            if [ -f package-lock.json ]; then
+              npm ci
+            else
+              npm install
+            fi
 
       - run:
           name: Frontend - Run Tests (optional)
           command: |
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             npm run test:ci || echo "No frontend tests configured yet"
 
       - run:
           name: Frontend - Snyk Security Scan
           command: |
             source $BASH_ENV
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
@@ -73,7 +74,7 @@ jobs:
           name: Frontend - SonarCloud Analysis
           command: |
             source $BASH_ENV
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-frontend \
               -Dsonar.organization="${SONAR_ORG}" \
@@ -85,24 +86,24 @@ jobs:
       - run:
           name: Backend - Install Dependencies
           command: |
-              cd backend
-              if [ -f package-lock.json ]; then
+            cd "Versatile Visions/Backend"
+            if [ -f package-lock.json ]; then
               npm ci
-              else
+            else
               npm install
-              fi
+            fi
 
       - run:
           name: Backend - Run Tests (optional)
           command: |
-            cd Backend
+            cd "Versatile Visions/Backend"
             npm run test:ci || echo "No backend tests configured yet"
 
       - run:
           name: Backend - Snyk Security Scan
           command: |
             source $BASH_ENV
-            cd Backend
+            cd "Versatile Visions/Backend"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-backend" || true
@@ -111,7 +112,7 @@ jobs:
           name: Backend - SonarCloud Analysis
           command: |
             source $BASH_ENV
-            cd Backend
+            cd "Versatile Visions/Backend"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-backend \
               -Dsonar.organization="${SONAR_ORG}" \
@@ -122,7 +123,7 @@ jobs:
 workflows:
   version: 2
 
-  # Nightly job (runs at 2 AM UTC)
+  # Nightly scheduled run (2 AM UTC)
   nightly-security-and-quality:
     triggers:
       - schedule:
@@ -134,7 +135,7 @@ workflows:
     jobs:
       - security-and-quality-scan
 
-  # On push to main or develop branches
+  # Run automatically on pushes to main/develop
   on-push:
     jobs:
       - security-and-quality-scan:
