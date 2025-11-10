@@ -13,7 +13,7 @@ jobs:
     steps:
       - checkout
 
-      # Diagnostic: show the directory structure
+      # Diagnostic: Show structure
       - run:
           name: Verify Folder Structure
           command: |
@@ -21,23 +21,29 @@ jobs:
             find . -maxdepth 3 -type d
             echo "====================================="
 
-      # Detect Frontend and Backend paths automatically
+      # Detect Frontend and Backend automatically (first 2 package.json files)
       - run:
           name: Detect Frontend and Backend folders
           command: |
-            echo "Detecting frontend and backend folders..."
-            FRONTEND_PATH=$(find . -type f -name package.json | grep -i "frontend" | xargs dirname | head -n 1)
-            BACKEND_PATH=$(find . -type f -name package.json | grep -i "backend" | xargs dirname | head -n 1)
+            echo "Detecting project folders..."
+            PACKAGE_PATHS=($(find . -type f -name package.json | head -n 2))
 
-            echo "Detected frontend path: $FRONTEND_PATH"
-            echo "Detected backend path: $BACKEND_PATH"
+            if [ ${#PACKAGE_PATHS[@]} -lt 1 ]; then
+              echo "❌ No package.json files found. Check your repo structure."
+              exit 1
+            fi
 
-            # Save to environment for later steps
+            FRONTEND_PATH=$(dirname "${PACKAGE_PATHS[0]}")
+            BACKEND_PATH=$(dirname "${PACKAGE_PATHS[1]}")
+
+            echo "✅ Detected frontend path: $FRONTEND_PATH"
+            echo "✅ Detected backend path: $BACKEND_PATH"
+
             echo "export FRONTEND_PATH=$FRONTEND_PATH" >> $BASH_ENV
             echo "export BACKEND_PATH=$BACKEND_PATH" >> $BASH_ENV
             source $BASH_ENV
 
-      # Install Java (for SonarScanner)
+      # Install Java (required for SonarScanner)
       - run:
           name: Install Java 17
           command: |
@@ -45,7 +51,7 @@ jobs:
             sudo apt-get install -y openjdk-17-jre-headless
             java -version
 
-      # Install Snyk CLI (local user-level)
+      # Install Snyk CLI
       - run:
           name: Install Snyk CLI
           command: |
@@ -68,24 +74,24 @@ jobs:
             source $BASH_ENV
             sonar-scanner --version
 
-      # ---------- FRONTEND PIPELINE ----------
+      # ---------- FRONTEND ----------
       - run:
           name: Frontend - Install Dependencies
           command: |
             source $BASH_ENV
-            echo "Installing frontend dependencies from $FRONTEND_PATH"
+            echo "Installing frontend dependencies in $FRONTEND_PATH"
             cd "$FRONTEND_PATH"
             npm ci || npm install
 
       - run:
-          name: Frontend - Tests (optional)
+          name: Frontend - Tests
           command: |
             source $BASH_ENV
             cd "$FRONTEND_PATH"
             npm run test:ci || echo "No frontend tests configured"
 
       - run:
-          name: Frontend - Snyk Security Scan
+          name: Frontend - Snyk Scan
           command: |
             source $BASH_ENV
             cd "$FRONTEND_PATH"
@@ -105,24 +111,24 @@ jobs:
               -Dsonar.login="${SONAR_TOKEN}" \
               -Dsonar.sources=.
 
-      # ---------- BACKEND PIPELINE ----------
+      # ---------- BACKEND ----------
       - run:
           name: Backend - Install Dependencies
           command: |
             source $BASH_ENV
-            echo "Installing backend dependencies from $BACKEND_PATH"
+            echo "Installing backend dependencies in $BACKEND_PATH"
             cd "$BACKEND_PATH"
             npm ci || npm install
 
       - run:
-          name: Backend - Tests (optional)
+          name: Backend - Tests
           command: |
             source $BASH_ENV
             cd "$BACKEND_PATH"
             npm run test:ci || echo "No backend tests configured"
 
       - run:
-          name: Backend - Snyk Security Scan
+          name: Backend - Snyk Scan
           command: |
             source $BASH_ENV
             cd "$BACKEND_PATH"
@@ -164,3 +170,4 @@ workflows:
               only:
                 - main
                 - develop
+                
