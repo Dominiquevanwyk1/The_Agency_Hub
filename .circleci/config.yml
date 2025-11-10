@@ -23,10 +23,10 @@ jobs:
 
       # Install Snyk CLI
       - run:
-          name: Install Snyk CLI
-          command: |
-            curl -sL https://raw.githubusercontent.com/snyk/cli/main/install.sh | bash
-            snyk --version
+            name: Install Snyk CLI
+            command: |
+                    curl -sL https://snyk.io/install.sh | bash
+                    snyk --version
 
       # Download SonarScanner CLI
       - run:
