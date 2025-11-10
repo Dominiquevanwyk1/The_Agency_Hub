@@ -85,8 +85,12 @@ jobs:
       - run:
           name: Backend - Install Dependencies
           command: |
-            cd Backend
-            npm ci
+              cd backend
+              if [ -f package-lock.json ]; then
+              npm ci
+              else
+              npm install
+              fi
 
       - run:
           name: Backend - Run Tests (optional)
