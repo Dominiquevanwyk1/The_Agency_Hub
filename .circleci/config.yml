@@ -48,7 +48,7 @@ jobs:
       - run:
           name: Frontend - Install Dependencies
           command: |
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             if [ -f package-lock.json ]; then
               npm ci
             else
@@ -58,14 +58,14 @@ jobs:
       - run:
           name: Frontend - Run Tests (optional)
           command: |
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             npm run test:ci || echo "No frontend tests configured yet"
 
       - run:
           name: Frontend - Snyk Security Scan
           command: |
             source $BASH_ENV
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
@@ -74,7 +74,7 @@ jobs:
           name: Frontend - SonarCloud Analysis
           command: |
             source $BASH_ENV
-            cd Frontend
+            cd "Versatile Visions/Frontend"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-frontend \
               -Dsonar.organization="${SONAR_ORG}" \
@@ -86,7 +86,7 @@ jobs:
       - run:
           name: Backend - Install Dependencies
           command: |
-            cd Backend
+            cd "Versatile Visions/Backend"
             if [ -f package-lock.json ]; then
               npm ci
             else
@@ -96,14 +96,14 @@ jobs:
       - run:
           name: Backend - Run Tests (optional)
           command: |
-            cd Backend
+            cd "Versatile Visions/Backend"
             npm run test:ci || echo "No backend tests configured yet"
 
       - run:
           name: Backend - Snyk Security Scan
           command: |
             source $BASH_ENV
-            cd Backend
+            cd "Versatile Visions/Backend"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-backend" || true
@@ -112,7 +112,7 @@ jobs:
           name: Backend - SonarCloud Analysis
           command: |
             source $BASH_ENV
-            cd Backend
+            cd "Versatile Visions/Backend"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-backend \
               -Dsonar.organization="${SONAR_ORG}" \
