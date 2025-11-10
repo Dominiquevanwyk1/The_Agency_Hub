@@ -13,15 +13,31 @@ jobs:
     steps:
       - checkout
 
-      # Diagnostic step: Show folder structure
+      # Diagnostic: show the directory structure
       - run:
           name: Verify Folder Structure
           command: |
             echo "==== Project Directory Structure ===="
-            ls -R
+            find . -maxdepth 3 -type d
             echo "====================================="
 
-      # Install Java (required for SonarScanner)
+      # Detect Frontend and Backend paths automatically
+      - run:
+          name: Detect Frontend and Backend folders
+          command: |
+            echo "Detecting frontend and backend folders..."
+            FRONTEND_PATH=$(find . -type f -name package.json | grep -i "frontend" | xargs dirname | head -n 1)
+            BACKEND_PATH=$(find . -type f -name package.json | grep -i "backend" | xargs dirname | head -n 1)
+
+            echo "Detected frontend path: $FRONTEND_PATH"
+            echo "Detected backend path: $BACKEND_PATH"
+
+            # Save to environment for later steps
+            echo "export FRONTEND_PATH=$FRONTEND_PATH" >> $BASH_ENV
+            echo "export BACKEND_PATH=$BACKEND_PATH" >> $BASH_ENV
+            source $BASH_ENV
+
+      # Install Java (for SonarScanner)
       - run:
           name: Install Java 17
           command: |
@@ -29,7 +45,7 @@ jobs:
             sudo apt-get install -y openjdk-17-jre-headless
             java -version
 
-      # Install Snyk CLI (user-level install to avoid permission issues)
+      # Install Snyk CLI (local user-level)
       - run:
           name: Install Snyk CLI
           command: |
@@ -56,33 +72,32 @@ jobs:
       - run:
           name: Frontend - Install Dependencies
           command: |
-            cd Frontend
-            if [ -f package-lock.json ]; then
-              npm ci
-            else
-              npm install
-            fi
+            source $BASH_ENV
+            echo "Installing frontend dependencies from $FRONTEND_PATH"
+            cd "$FRONTEND_PATH"
+            npm ci || npm install
 
       - run:
-          name: Frontend - Run Tests (optional)
+          name: Frontend - Tests (optional)
           command: |
-            cd Frontend
-            npm run test:ci || echo "No frontend tests configured yet"
+            source $BASH_ENV
+            cd "$FRONTEND_PATH"
+            npm run test:ci || echo "No frontend tests configured"
 
       - run:
           name: Frontend - Snyk Security Scan
           command: |
             source $BASH_ENV
-            cd Frontend
+            cd "$FRONTEND_PATH"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
 
       - run:
-          name: Frontend - SonarCloud Analysis
+          name: Frontend - SonarCloud Scan
           command: |
             source $BASH_ENV
-            cd Frontend
+            cd "$FRONTEND_PATH"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-frontend \
               -Dsonar.organization="${SONAR_ORG}" \
@@ -94,33 +109,32 @@ jobs:
       - run:
           name: Backend - Install Dependencies
           command: |
-            cd Backend
-            if [ -f package-lock.json ]; then
-              npm ci
-            else
-              npm install
-            fi
+            source $BASH_ENV
+            echo "Installing backend dependencies from $BACKEND_PATH"
+            cd "$BACKEND_PATH"
+            npm ci || npm install
 
       - run:
-          name: Backend - Run Tests (optional)
+          name: Backend - Tests (optional)
           command: |
-            cd Backend
-            npm run test:ci || echo "No backend tests configured yet"
+            source $BASH_ENV
+            cd "$BACKEND_PATH"
+            npm run test:ci || echo "No backend tests configured"
 
       - run:
           name: Backend - Snyk Security Scan
           command: |
             source $BASH_ENV
-            cd Backend
+            cd "$BACKEND_PATH"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-backend" || true
 
       - run:
-          name: Backend - SonarCloud Analysis
+          name: Backend - SonarCloud Scan
           command: |
             source $BASH_ENV
-            cd Backend
+            cd "$BACKEND_PATH"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-backend \
               -Dsonar.organization="${SONAR_ORG}" \
@@ -131,7 +145,6 @@ jobs:
 workflows:
   version: 2
 
-  # Nightly scheduled run (2 AM UTC)
   nightly-security-and-quality:
     triggers:
       - schedule:
@@ -143,7 +156,6 @@ workflows:
     jobs:
       - security-and-quality-scan
 
-  # Run automatically on pushes to main/develop
   on-push:
     jobs:
       - security-and-quality-scan:
