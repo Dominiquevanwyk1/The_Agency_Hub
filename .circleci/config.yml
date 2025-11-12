@@ -1,145 +1,145 @@
 version: 2.1
-
-orbs:
-  node: circleci/node@6.3.0
-
+orbs: {node: circleci/node@6.3.0}
 jobs:
   security-and-quality-scan:
     docker:
-      - image: cimg/node:20.12
-    environment:
-      NODE_OPTIONS: "--max_old_space_size=4096"
-
+    - {image: 'cimg/node:20.12'}
+    environment: {NODE_OPTIONS: --max_old_space_size=4096}
     steps:
-      - checkout
+    - checkout
+    - run:
+        name: Verify Folder Structure
+        command: |
+          echo "==== Project Directory Structure ===="
+          find . -maxdepth 3 -type d
+          echo "====================================="
+    - run:
+        name: Detect Frontend and Backend folders
+        command: |
+          echo "Detecting project folders..."
 
-      # Diagnostic: Show structure
-      - run:
-          name: Verify Folder Structure
-          command: |
-            echo "==== Project Directory Structure ===="
-            find . -maxdepth 3 -type d
-            echo "====================================="
+          # Collect up to 2 package.json paths; tolerate SIGPIPE by adding "|| true"
+          PACKAGE_PATHS=($(find . -type f -name package.json | head -n 2 || true))
 
-      # Detect Frontend and Backend automatically (first 2 package.json files)
-      - run:
-          name: Detect Frontend and Backend folders
-          command: |
-            echo "Detecting project folders..."
-            PACKAGE_PATHS=($(find . -type f -name package.json | head -n 2))
+          if [ ${#PACKAGE_PATHS[@]} -lt 1 ]; then
+            echo "❌ No package.json files found. Check your repo structure."
+            exit 1
+          fi
 
-            if [ ${#PACKAGE_PATHS[@]} -lt 1 ]; then
-              echo "❌ No package.json files found. Check your repo structure."
-              exit 1
-            fi
+          FRONTEND_PATH=$(dirname "${PACKAGE_PATHS[0]}")
+          echo "✅ Detected frontend path: $FRONTEND_PATH"
+          echo "export FRONTEND_PATH=$FRONTEND_PATH" >> $BASH_ENV
 
-            FRONTEND_PATH=$(dirname "${PACKAGE_PATHS[0]}")
+          # If there's a second package.json, treat it as backend; otherwise skip.
+          if [ ${#PACKAGE_PATHS[@]} -ge 2 ]; then
             BACKEND_PATH=$(dirname "${PACKAGE_PATHS[1]}")
-
-            echo "✅ Detected frontend path: $FRONTEND_PATH"
             echo "✅ Detected backend path: $BACKEND_PATH"
-
-            echo "export FRONTEND_PATH=$FRONTEND_PATH" >> $BASH_ENV
             echo "export BACKEND_PATH=$BACKEND_PATH" >> $BASH_ENV
-            source $BASH_ENV
+          else
+            echo "⚠️ Only one package.json found; skipping backend detection."
+          fi
 
-      # Install Java (required for SonarScanner)
-      - run:
-          name: Install Java 17
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y openjdk-17-jre-headless
-            java -version
-
-      # Install Snyk CLI
-      - run:
-          name: Install Snyk CLI
-          command: |
-            mkdir -p $HOME/.local
-            npm install snyk --prefix=$HOME/.local
-            echo 'export PATH=$HOME/.local/node_modules/.bin:$PATH' >> $BASH_ENV
-            source $BASH_ENV
-            snyk --version
-
-      # Install SonarScanner CLI
-      - run:
-          name: Install SonarScanner CLI
-          command: |
-            SCANNER_VERSION=5.0.1.3006
-            curl -sSLo /tmp/sonar.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
-            unzip -q /tmp/sonar.zip -d $HOME
-            mv $HOME/sonar-scanner-* $HOME/sonar-scanner
-            echo 'export PATH="$HOME/sonar-scanner/bin:$PATH"' >> $BASH_ENV
-            echo 'export SONAR_SCANNER_OPTS="-Xmx1024m"' >> $BASH_ENV
-            source $BASH_ENV
-            sonar-scanner --version
-
-      # ---------- FRONTEND ----------
-      - run:
-          name: Frontend - Install Dependencies
-          command: |
-            source $BASH_ENV
-            echo "Installing frontend dependencies in $FRONTEND_PATH"
-            cd "$FRONTEND_PATH"
-            npm ci || npm install
-
-      - run:
-          name: Frontend - Tests
-          command: |
-            source $BASH_ENV
-            cd "$FRONTEND_PATH"
-            npm run test:ci || echo "No frontend tests configured"
-
-      - run:
-          name: Frontend - Snyk Scan
-          command: |
-            source $BASH_ENV
-            cd "$FRONTEND_PATH"
-            snyk auth "${SNYK_TOKEN}"
-            snyk test --severity-threshold=medium || true
-            snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
-
-      - run:
-          name: Frontend - SonarCloud Scan
-          command: |
-            source $BASH_ENV
-            cd "$FRONTEND_PATH"
-            sonar-scanner \
-              -Dsonar.projectKey=versatile-visions-frontend \
-              -Dsonar.organization="${SONAR_ORG}" \
-              -Dsonar.host.url="https://sonarcloud.io" \
-              -Dsonar.login="${SONAR_TOKEN}" \
-              -Dsonar.sources=.
-
-      # ---------- BACKEND ----------
-      - run:
-          name: Backend - Install Dependencies
-          command: |
-            source $BASH_ENV
+          # Make sure new env vars are available to later steps
+          # (Circle will source BASH_ENV automatically for subsequent steps,
+          #  but we source here so this step can use them immediately if needed)
+          source $BASH_ENV
+    - run:
+        name: Install Java 17
+        command: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jre-headless
+          java -version
+    - run:
+        name: Install Snyk CLI
+        command: |
+          mkdir -p $HOME/.local
+          npm install snyk --prefix=$HOME/.local
+          echo 'export PATH=$HOME/.local/node_modules/.bin:$PATH' >> $BASH_ENV
+          source $BASH_ENV
+          snyk --version
+    - run:
+        name: Install SonarScanner CLI
+        command: |
+          SCANNER_VERSION=5.0.1.3006
+          curl -sSLo /tmp/sonar.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
+          unzip -q /tmp/sonar.zip -d $HOME
+          mv $HOME/sonar-scanner-* $HOME/sonar-scanner
+          echo 'export PATH="$HOME/sonar-scanner/bin:$PATH"' >> $BASH_ENV
+          echo 'export SONAR_SCANNER_OPTS="-Xmx1024m"' >> $BASH_ENV
+          source $BASH_ENV
+          sonar-scanner --version
+    - run:
+        name: Frontend - Install Dependencies
+        command: |
+          source $BASH_ENV
+          echo "Installing frontend dependencies in $FRONTEND_PATH"
+          cd "$FRONTEND_PATH"
+          npm ci || npm install
+    - run:
+        name: Frontend - Tests
+        command: |
+          source $BASH_ENV
+          cd "$FRONTEND_PATH"
+          npm run test:ci || echo "No frontend tests configured"
+    - run:
+        name: Frontend - Snyk Scan
+        command: |
+          source $BASH_ENV
+          cd "$FRONTEND_PATH"
+          snyk auth "${SNYK_TOKEN}"
+          snyk test --severity-threshold=medium || true
+          snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
+    - run:
+        name: Frontend - SonarCloud Scan
+        command: |
+          source $BASH_ENV
+          cd "$FRONTEND_PATH"
+          sonar-scanner \
+            -Dsonar.projectKey=versatile-visions-frontend \
+            -Dsonar.organization="${SONAR_ORG}" \
+            -Dsonar.host.url="https://sonarcloud.io" \
+            -Dsonar.login="${SONAR_TOKEN}" \
+            -Dsonar.sources=.
+    - run:
+        name: Backend - Install Dependencies
+        command: |
+          source $BASH_ENV
+          if [ -z "${BACKEND_PATH:-}" ]; then
+            echo "No backend detected; skipping backend install."
+          else
             echo "Installing backend dependencies in $BACKEND_PATH"
             cd "$BACKEND_PATH"
             npm ci || npm install
-
-      - run:
-          name: Backend - Tests
-          command: |
-            source $BASH_ENV
+          fi
+    - run:
+        name: Backend - Tests
+        command: |
+          source $BASH_ENV
+          if [ -z "${BACKEND_PATH:-}" ]; then
+            echo "No backend detected; skipping backend tests."
+          else
             cd "$BACKEND_PATH"
             npm run test:ci || echo "No backend tests configured"
-
-      - run:
-          name: Backend - Snyk Scan
-          command: |
-            source $BASH_ENV
+          fi
+    - run:
+        name: Backend - Snyk Scan
+        command: |
+          source $BASH_ENV
+          if [ -z "${BACKEND_PATH:-}" ]; then
+            echo "No backend detected; skipping backend Snyk."
+          else
             cd "$BACKEND_PATH"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-backend" || true
-
-      - run:
-          name: Backend - SonarCloud Scan
-          command: |
-            source $BASH_ENV
+          fi
+    - run:
+        name: Backend - SonarCloud Scan
+        command: |
+          source $BASH_ENV
+          if [ -z "${BACKEND_PATH:-}" ]; then
+            echo "No backend detected; skipping backend SonarCloud."
+          else
             cd "$BACKEND_PATH"
             sonar-scanner \
               -Dsonar.projectKey=versatile-visions-backend \
@@ -147,27 +147,8 @@ jobs:
               -Dsonar.host.url="https://sonarcloud.io" \
               -Dsonar.login="${SONAR_TOKEN}" \
               -Dsonar.sources=.
-
+          fi
 workflows:
   version: 2
-
   nightly-security-and-quality:
-    triggers:
-      - schedule:
-          cron: "0 2 * * *"
-          filters:
-            branches:
-              only:
-                - main
-    jobs:
-      - security-and-quality-scan
-
-  on-push:
-    jobs:
-      - security-and-quality-scan:
-          filters:
-            branches:
-              only:
-                - main
-                - develop
-                
+    jobs: [security-and-quality-scan]
