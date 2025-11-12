@@ -128,18 +128,18 @@ jobs:
             cd "$FRONTEND_PATH"
             snyk auth "${SNYK_TOKEN}"
             snyk test --severity-threshold=medium || true
-            snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-frontend" || true
+            snyk monitor --org="${SNYK_ORG}" --project-name="The_Agency_Hub" || true
 
       - run:
           name: Frontend - SonarCloud Scan
           command: |
             source "$BASH_ENV"
             SONAR_BRANCH="${CIRCLE_BRANCH:-main}"
-            echo "Running SonarScanner from $FRONTEND_PATH on branch $SONAR_BRANCH"
+            echo "Running SonarScanner for The_Agency_Hub on branch $SONAR_BRANCH"
             cd "$FRONTEND_PATH"
             sonar-scanner \
-              -Dsonar.projectKey=versatile-visions-frontend \
-              -Dsonar.organization="${SONAR_ORG}" \
+              -Dsonar.projectKey=The_Agency_Hub \
+              -Dsonar.organization=Dominique \
               -Dsonar.host.url="https://sonarcloud.io" \
               -Dsonar.login="${SONAR_TOKEN}" \
               -Dsonar.projectBaseDir="$(pwd)" \
@@ -180,7 +180,7 @@ jobs:
               cd "$BACKEND_PATH"
               snyk auth "${SNYK_TOKEN}"
               snyk test --severity-threshold=medium || true
-              snyk monitor --org="${SNYK_ORG}" --project-name="versatile-visions-backend" || true
+              snyk monitor --org="${SNYK_ORG}" --project-name="The_Agency_Hub-backend" || true
             fi
 
       - run:
@@ -193,8 +193,8 @@ jobs:
               SONAR_BRANCH="${CIRCLE_BRANCH:-main}"
               cd "$BACKEND_PATH"
               sonar-scanner \
-                -Dsonar.projectKey=versatile-visions-backend \
-                -Dsonar.organization="${SONAR_ORG}" \
+                -Dsonar.projectKey=The_Agency_Hub \
+                -Dsonar.organization=Dominique \
                 -Dsonar.host.url="https://sonarcloud.io" \
                 -Dsonar.login="${SONAR_TOKEN}" \
                 -Dsonar.projectBaseDir="$(pwd)" \
