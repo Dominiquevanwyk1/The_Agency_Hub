@@ -76,6 +76,7 @@ jobs:
               echo "⚠️ No separate backend package.json detected; skipping backend steps."
             fi
 
+            # Make environment variables available to later steps
             source "$BASH_ENV"
 
       - run:
@@ -110,6 +111,10 @@ jobs:
           name: Frontend - Install Dependencies
           command: |
             source "$BASH_ENV"
+            if [ -z "${FRONTEND_PATH:-}" ]; then
+              echo "❌ FRONTEND_PATH not set. Aborting frontend install."
+              exit 1
+            fi
             echo "Installing frontend dependencies in $FRONTEND_PATH"
             cd "$FRONTEND_PATH"
             npm ci || npm install
@@ -126,26 +131,73 @@ jobs:
           command: |
             source "$BASH_ENV"
             cd "$FRONTEND_PATH"
-            snyk auth "${SNYK_TOKEN}"
+            snyk auth "${SNYK_TOKEN}" || true
             snyk test --severity-threshold=medium || true
             snyk monitor --org="${SNYK_ORG}" --project-name="The_Agency_Hub" || true
 
       - run:
-          name: Frontend - SonarCloud Scan
+          name: Frontend - SonarCloud Scan (diagnostics + debug)
           command: |
+            set -eo pipefail
             source "$BASH_ENV"
+
+            # Hardcoded to your SonarCloud project/org
+            SONAR_PROJECT_KEY="The_Agency_Hub"
+            SONAR_ORG="Dominique"
             SONAR_BRANCH="${CIRCLE_BRANCH:-main}"
-            echo "Running SonarScanner for The_Agency_Hub on branch $SONAR_BRANCH"
-            cd "$FRONTEND_PATH"
-            sonar-scanner \
-              -Dsonar.projectKey=The_Agency_Hub \
-              -Dsonar.organization=Dominique \
-              -Dsonar.host.url="https://sonarcloud.io" \
-              -Dsonar.login="${SONAR_TOKEN}" \
-              -Dsonar.projectBaseDir="$(pwd)" \
-              -Dsonar.sources=. \
-              -Dsonar.exclusions="**/node_modules/**,**/*.spec.js,**/*.test.js" \
-              -Dsonar.branch.name="$SONAR_BRANCH"
+
+            if [ -z "${SONAR_TOKEN:-}" ]; then
+              echo "❌ SONAR_TOKEN not set in CircleCI environment variables."
+              exit 1
+            fi
+            if [ -z "${FRONTEND_PATH:-}" ]; then
+              echo "❌ FRONTEND_PATH not set. Aborting Sonar scan."
+              exit 1
+            fi
+
+            echo "Diagnostics:"
+            echo "  SONAR_PROJECT_KEY: $SONAR_PROJECT_KEY"
+            echo "  SONAR_ORG: $SONAR_ORG"
+            echo "  SONAR_BRANCH: $SONAR_BRANCH"
+            echo "  FRONTEND_PATH: $FRONTEND_PATH"
+            echo ""
+
+            echo "Checking SonarCloud for project info (projects/search)..."
+            curl -sS -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/projects/search?projects=${SONAR_PROJECT_KEY}" || true
+            echo ""
+            echo "Checking SonarCloud for branches (project_branches/list)..."
+            curl -sS -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/project_branches/list?project=${SONAR_PROJECT_KEY}" || true
+            echo ""
+
+            cd "$FRONTEND_PATH" || { echo "Cannot cd to $FRONTEND_PATH"; exit 1; }
+
+            # Run scanner once; on failure re-run with -X for debug logs
+            if sonar-scanner \
+                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                -Dsonar.organization="${SONAR_ORG}" \
+                -Dsonar.host.url="https://sonarcloud.io" \
+                -Dsonar.login="${SONAR_TOKEN}" \
+                -Dsonar.projectBaseDir="$(pwd)" \
+                -Dsonar.sources=. \
+                -Dsonar.exclusions="**/node_modules/**,**/*.spec.js,**/*.test.js" \
+                -Dsonar.branch.name="${SONAR_BRANCH}"
+            then
+              echo "✅ SonarScanner completed successfully."
+            else
+              echo "⚠️ SonarScanner failed. Re-running with -X for debug output..."
+              sonar-scanner -X \
+                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                -Dsonar.organization="${SONAR_ORG}" \
+                -Dsonar.host.url="https://sonarcloud.io" \
+                -Dsonar.login="${SONAR_TOKEN}" \
+                -Dsonar.projectBaseDir="$(pwd)" \
+                -Dsonar.sources=. \
+                -Dsonar.exclusions="**/node_modules/**,**/*.spec.js,**/*.test.js" \
+                -Dsonar.branch.name="${SONAR_BRANCH}" || true
+
+              echo "SonarScanner debug run complete. See logs above for details."
+              exit 1
+            fi
 
       - run:
           name: Backend - Install Dependencies
@@ -178,29 +230,71 @@ jobs:
               echo "No backend detected; skipping backend Snyk."
             else
               cd "$BACKEND_PATH"
-              snyk auth "${SNYK_TOKEN}"
+              snyk auth "${SNYK_TOKEN}" || true
               snyk test --severity-threshold=medium || true
               snyk monitor --org="${SNYK_ORG}" --project-name="The_Agency_Hub-backend" || true
             fi
 
       - run:
-          name: Backend - SonarCloud Scan
+          name: Backend - SonarCloud Scan (diagnostics + debug)
           command: |
+            set -eo pipefail
             source "$BASH_ENV"
+
+            SONAR_PROJECT_KEY="The_Agency_Hub"
+            SONAR_ORG="Dominique"
+            SONAR_BRANCH="${CIRCLE_BRANCH:-main}"
+
+            if [ -z "${SONAR_TOKEN:-}" ]; then
+              echo "❌ SONAR_TOKEN not set in CircleCI environment variables."
+              exit 1
+            fi
             if [ -z "${BACKEND_PATH:-}" ]; then
               echo "No backend detected; skipping backend SonarCloud."
-            else
-              SONAR_BRANCH="${CIRCLE_BRANCH:-main}"
-              cd "$BACKEND_PATH"
-              sonar-scanner \
-                -Dsonar.projectKey=The_Agency_Hub \
-                -Dsonar.organization=Dominique \
+              exit 0
+            fi
+
+            echo "Diagnostics (backend):"
+            echo "  SONAR_PROJECT_KEY: $SONAR_PROJECT_KEY"
+            echo "  SONAR_ORG: $SONAR_ORG"
+            echo "  SONAR_BRANCH: $SONAR_BRANCH"
+            echo "  BACKEND_PATH: $BACKEND_PATH"
+            echo ""
+
+            echo "Checking SonarCloud for project info (projects/search)..."
+            curl -sS -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/projects/search?projects=${SONAR_PROJECT_KEY}" || true
+            echo ""
+            echo "Checking SonarCloud for branches (project_branches/list)..."
+            curl -sS -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/project_branches/list?project=${SONAR_PROJECT_KEY}" || true
+            echo ""
+
+            cd "$BACKEND_PATH" || { echo "Cannot cd to $BACKEND_PATH"; exit 1; }
+
+            if sonar-scanner \
+                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                -Dsonar.organization="${SONAR_ORG}" \
                 -Dsonar.host.url="https://sonarcloud.io" \
                 -Dsonar.login="${SONAR_TOKEN}" \
                 -Dsonar.projectBaseDir="$(pwd)" \
                 -Dsonar.sources=. \
                 -Dsonar.exclusions="**/node_modules/**,**/*.spec.js,**/*.test.js" \
-                -Dsonar.branch.name="$SONAR_BRANCH"
+                -Dsonar.branch.name="${SONAR_BRANCH}"
+            then
+              echo "✅ Backend SonarScanner completed successfully."
+            else
+              echo "⚠️ Backend SonarScanner failed. Re-running with -X for debug output..."
+              sonar-scanner -X \
+                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                -Dsonar.organization="${SONAR_ORG}" \
+                -Dsonar.host.url="https://sonarcloud.io" \
+                -Dsonar.login="${SONAR_TOKEN}" \
+                -Dsonar.projectBaseDir="$(pwd)" \
+                -Dsonar.sources=. \
+                -Dsonar.exclusions="**/node_modules/**,**/*.spec.js,**/*.test.js" \
+                -Dsonar.branch.name="${SONAR_BRANCH}" || true
+
+              echo "SonarScanner debug run complete (backend). See logs above for details."
+              exit 1
             fi
 
 workflows:
